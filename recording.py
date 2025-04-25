@@ -7,6 +7,7 @@ import math
 from robot import UR5Robot
 import random
 import time
+import cv2
 from robot_controller import RobotController
 from utils import generate_circular_points, Normalizer
 from simulation import SimulationEnvironment
@@ -26,9 +27,76 @@ box_size = np.array([1,1,1])
 goal_orientation = np.array([np.pi/2,0, 0])
 vel = 3
 
+class VideoRecorder:
+    def __init__(self, filename="simulation.mp4", fps=30, width=1280, height=720):
+        self.fps = fps
+        self.width = width
+        self.height = height
+        self.writer = cv2.VideoWriter(
+            filename,
+            cv2.VideoWriter_fourcc(*'mp4v'),
+            fps,
+            (width, height)
+        )
+        self.recording = True
+        print(f"Recording started. Output: {filename}")
+        
+    def capture_frame(self, box_id=None):
+        if not self.recording:
+            return
+            
+        # Set camera parameters
+        camera_distance = 2.0
+        camera_yaw = 50
+        camera_pitch = -35
+        
+        # Set camera target to box if available
+        if box_id is not None:
+            camera_target, _ = pybullet.getBasePositionAndOrientation(box_id)
+        else:
+            camera_target = [0, 0, 0]
+            
+        # Compute view and projection matrices
+        view_matrix = pybullet.computeViewMatrixFromYawPitchRoll(
+            cameraTargetPosition=camera_target,
+            distance=camera_distance,
+            yaw=camera_yaw,
+            pitch=camera_pitch,
+            roll=0,
+            upAxisIndex=2
+        )
+        
+        proj_matrix = pybullet.computeProjectionMatrixFOV(
+            fov=60,
+            aspect=float(self.width)/self.height,
+            nearVal=0.1,
+            farVal=100.0
+        )
+        
+        # Capture frame
+        (_, _, px, _, _) = pybullet.getCameraImage(
+            width=self.width,
+            height=self.height,
+            viewMatrix=view_matrix,
+            projectionMatrix=proj_matrix,
+            renderer=pybullet.ER_BULLET_HARDWARE_OPENGL
+        )
+        
+        # Convert to RGB and write to video
+        rgb_array = np.array(px, dtype=np.uint8)
+        rgb_array = np.reshape(rgb_array, (self.height, self.width, 4))
+        rgb_array = rgb_array[:, :, :3]  # Remove alpha channel
+        
+        self.writer.write(rgb_array)
+        
+    def stop(self):
+        if self.recording:
+            self.writer.release()
+            self.recording = False
+            print("Recording stopped and saved.")
 
 def get_robot_commands(box_size, box_position, box_orientation, initial_robot_pos):
-    generator = GaitGenerator( box_size, resolution, clearance_radius, num_arc_points,min_intersection_distance,arc_height_factor)
+    generator = GaitGenerator(box_size, resolution, clearance_radius, num_arc_points,min_intersection_distance,arc_height_factor)
     # Generate paths
     generator.generate_paths(
         initial_centroid=np.array(box_position),
@@ -82,7 +150,10 @@ def move_box_thread(box_id, position, orientation, smooth=True, steps=100):
             pybullet.stepSimulation()
 
 def main():
+    # Initialize simulation and video recorder
     sim_env = SimulationEnvironment(goal_orientation, use_gui=True)
+    recorder = VideoRecorder("robot_manipulation.mp4")
+    
     robots = sim_env.robots
     robot_controller = RobotController(sim_env.robots)
 
@@ -90,6 +161,9 @@ def main():
     box_position = np.array([Item.X_Y_CENTER[0], Item.X_Y_CENTER[1], 
                            RobotTeam.CENTER[2] - Item.HEIGHT_FROM_ROBOT - box_size[2]/2])
     box_id = sim_env.spawn_box(box_position, box_size, Item.MASS, Item.COLOR, "main_box")
+    
+    # Initial recording
+    recorder.capture_frame(box_id)
     
     # Create initial constraint to hold box in place
     box_constraint = pybullet.createConstraint(
@@ -110,6 +184,11 @@ def main():
     )
     initial_orientations = [pybullet.getQuaternionFromEuler([0, 0, 0]) for _ in range(RobotTeam.NUM_ROBOTS)]
     robot_controller.move_robots_simultaneously(list(zip(initial_robot_pos, initial_orientations)))
+
+    # Record frames after robot positioning
+    for _ in range(10):
+        pybullet.stepSimulation()
+        recorder.capture_frame(box_id)
 
     # Get robot commands and transformation data
     data = get_robot_commands(box_size, box_position, np.array([0, 0, 0]), initial_robot_pos)
@@ -139,7 +218,7 @@ def main():
                 robot_constraints[i] = None
         
         if is_shift:
-            shift_counter+=1
+            shift_counter += 1
             print(f"SHIFT ACTION {shift_index} - Moving box using predefined transformations")
             
             # Remove box constraint
@@ -168,7 +247,6 @@ def main():
                 
                 # Increment shift index for next time
                 shift_index += 1
-
             
             # Prepare robot positions for movement
             robot_poses = []
@@ -183,31 +261,29 @@ def main():
                 robot_poses.append((pos, ori))
                 print(f"Robot {robot_idx}: Moving to new position for shift")
             
-            # Create and start box movement thread
-            box_thread = threading.Thread(
-                target=move_box_thread, 
-                args=(box_id, target_position, target_orientation, False, 100)
-            )
-            threads = [threading.Thread(target=robot.move_to_pose, args=(pose[0], pose[1], vel))
-                   for robot, pose in zip(robots, robot_poses)]
+            # Move robots to their positions - do this first
+            robot_controller.move_robots_simultaneously(robot_poses, vel)
             
-            box_thread.start()
-            for thread in threads:
-                thread.start()
-
-
+            # Record a few frames after robot movement
+            for _ in range(10):
+                pybullet.stepSimulation()
+                recorder.capture_frame(box_id)
+                
+            # Move the box to new position - do this second
+            if isinstance(target_orientation, (list, tuple, np.ndarray)) and len(target_orientation) == 3:
+                target_orientation_quat = pybullet.getQuaternionFromEuler(target_orientation)
+            else:
+                target_orientation_quat = target_orientation
+                
+            pybullet.resetBasePositionAndOrientation(box_id, target_position, target_orientation_quat)
+            pybullet.stepSimulation()
             
-            # Start robot movement threads
-            #robot_controller.move_robots_simultaneously(robot_poses, vel)
-            
-            # Wait for box thread to complete
-            
-            for thread in threads:
-                thread.join()
-            box_thread.join()
-            
+            # Record a few frames after box movement
+            for _ in range(10):
+                pybullet.stepSimulation()
+                recorder.capture_frame(box_id)
+                
             # Create new constraint for box at its new position
-            orientation_quat = pybullet.getQuaternionFromEuler(target_orientation) if len(target_orientation) == 3 else target_orientation
             box_constraint = pybullet.createConstraint(
                 parentBodyUniqueId=box_id,
                 parentLinkIndex=-1,
@@ -217,7 +293,7 @@ def main():
                 jointAxis=[0, 0, 0],
                 parentFramePosition=[0, 0, 0],
                 childFramePosition=target_position,
-                childFrameOrientation=orientation_quat
+                childFrameOrientation=target_orientation_quat
             )
             
         else:  # Step or other action
@@ -236,11 +312,24 @@ def main():
             
             # Move robots to their positions
             robot_controller.move_robots_simultaneously(robot_poses, vel)
+            
+            # Record frames during robot movement
+            for _ in range(10):
+                pybullet.stepSimulation()
+                recorder.capture_frame(box_id)
         
-        # Allow physics to settle
+        # Allow physics to settle and capture frames
         for _ in range(10):
             pybullet.stepSimulation()
-            
+            recorder.capture_frame(box_id)
+
+    # Capture some final frames
+    for _ in range(30):
+        pybullet.stepSimulation()
+        recorder.capture_frame(box_id)
+
+    # Stop recording
+    recorder.stop()
 
     # Clean up constraints at the end
     if box_constraint:
@@ -250,9 +339,9 @@ def main():
         if robot_constraints[i]:
             pybullet.removeConstraint(robot_constraints[i])
 
-    print("\nMotion sequence completed")
-    time.sleep(60)
+    print("\nMotion sequence completed and video saved")
+    time.sleep(5)
 
 
 if __name__ == "__main__":
-    main() 
+    main()

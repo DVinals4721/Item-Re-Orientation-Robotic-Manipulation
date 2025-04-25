@@ -273,11 +273,23 @@ class GaitGenerator:
         self.centroids = centroids
         return centroids - centroids[0]
 
-    def _get_rotation_vectors(self, initial_orientation, final_orientation):
+    """def _get_rotation_vectors(self, initial_orientation, final_orientation):
         num_vectors = len(self.shifts)
         roll = np.linspace(initial_orientation[0], -final_orientation[0], num_vectors)
         pitch = np.linspace(initial_orientation[1], -final_orientation[1], num_vectors)
         yaw = np.linspace(initial_orientation[2], -final_orientation[2], num_vectors)
+        return np.column_stack([roll, pitch, yaw])"""
+    def _get_rotation_vectors(self, initial_orientation, final_orientation, base=5):
+        num_vectors = len(self.shifts)
+        
+        # Create exponentially spaced values between 0 and 1
+        t = (np.power(base, np.linspace(0, 1, num_vectors)) - 1) / (base - 1)
+        
+        # Interpolate between initial and final orientations using the exponential spacing
+        roll = initial_orientation[0] + t * (-final_orientation[0] - initial_orientation[0])
+        pitch = initial_orientation[1] + t * (-final_orientation[1] - initial_orientation[1])
+        yaw = initial_orientation[2] + t * (-final_orientation[2] - initial_orientation[2])
+        
         return np.column_stack([roll, pitch, yaw])
 
     def _get_new_surface_point(self, surface_point, index):
