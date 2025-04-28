@@ -22,28 +22,28 @@ def generate_random_orientation(max_angle):
     # Generate a random rotation axis
     axis = np.random.randn(3)
     axis /= np.linalg.norm(axis)  # Normalize to unit vector
-    
+
     # Generate a random angle within the current curriculum stage
     angle = np.random.uniform(-max_angle, max_angle)
-    
+
     # Create a rotation object
     r = Rotation.from_rotvec(angle * axis)
-    
+
     # Convert to quaternion
     quat = r.as_quat()
-    
+
     return tuple(quat)
 def calculate_box_angle_error(current_orientation, target_orientation):
     # Assuming orientations are quaternions
     current_quat = np.array(current_orientation)
     target_quat = np.array(target_orientation)
-    
+
     # Calculate the difference quaternion
     diff_quat = quaternion_multiply(quaternion_inverse(current_quat), target_quat)
-    
+
     # Convert to axis-angle representation
     angle = 2 * np.arccos(diff_quat[0])
-    
+
     return np.degrees(angle)  # Return the error in degrees
 
 def quaternion_multiply(q1, q2):
@@ -58,23 +58,3 @@ def quaternion_multiply(q1, q2):
 
 def quaternion_inverse(q):
     return np.array([q[0], -q[1], -q[2], -q[3]]) / np.dot(q, q)
-class Normalizer:
-    @staticmethod
-    def normalize_value(value, max_val):
-        return np.clip(value / max_val, -1.0, 1.0) if value is not None else 0.0
-
-    @staticmethod
-    def normalize_value_asymmetric(value, min_val, max_val):
-        return np.clip(2 * (value - min_val) / (max_val - min_val) - 1, -1.0, 1.0) if value is not None else 0.0
-
-    @staticmethod
-    def normalize_array(arr, max_val):
-        return [Normalizer.normalize_value(x, max_val) for x in arr] if arr is not None else [0.0] * 3
-
-    @staticmethod
-    def normalize_array_asymmetric(arr, min_val, max_val):
-        return [Normalizer.normalize_value_asymmetric(x, min_val, max_val) for x in arr] if arr is not None else [0.0] * 3
-
-    @staticmethod
-    def normalize_quaternion(q):
-        return np.clip(q, -1.0, 1.0).tolist() if q is not None else [1.0, 0.0, 0.0, 0.0]

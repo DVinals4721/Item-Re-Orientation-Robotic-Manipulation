@@ -7,7 +7,7 @@ from robot import UR5Robot
 import random
 import time
 from robot_controller import RobotController
-from utils import generate_circular_points, Normalizer
+from utils import generate_circular_points
 
 class SimulationEnvironment:
     def __init__(self, box_quaternion_angles, use_gui=False):
@@ -15,7 +15,7 @@ class SimulationEnvironment:
             pybullet.connect(pybullet.GUI)
         else:
             pybullet.connect(pybullet.DIRECT)
-        
+
         pybullet.setAdditionalSearchPath(pybullet_data.getDataPath())
         pybullet.setGravity(*SimulationConfig.GRAVITY)
         #self.plane_id = pybullet.loadURDF("plane.urdf")
@@ -31,12 +31,12 @@ class SimulationEnvironment:
         self.normalized_simulation_data = []
         self.reward = []
         self.goal = box_quaternion_angles
-    
+
 
     def spawn_box(self, position, size, mass, color, name, enable_collision=False):
         """
         Spawn a box with optional collision detection.
-        
+
         Parameters:
             position: [x, y, z] position of the box
             size: [length, width, height] dimensions
@@ -50,7 +50,7 @@ class SimulationEnvironment:
             halfExtents=[s/2 for s in size],
             rgbaColor=color
         )
-        
+
         if enable_collision:
             collision_shape_id = pybullet.createCollisionShape(
                 shapeType=pybullet.GEOM_BOX,
@@ -58,7 +58,7 @@ class SimulationEnvironment:
             )
         else:
             collision_shape_id = -1  # No collision shape
-        
+
         box_id = pybullet.createMultiBody(
             baseMass=mass,
             baseCollisionShapeIndex=collision_shape_id,
@@ -115,31 +115,31 @@ class SimulationEnvironment:
         robots = []
         for i in range(num_robots):
             if i == 0:
-                angle = 2*math.pi * i / num_robots 
+                angle = 2*math.pi * i / num_robots
                 position = [center[0] + radius * math.cos(angle),
                             center[1] + radius * math.sin(angle),
                             center[2]]
                 orientation = pybullet.getQuaternionFromEuler([0, 0, angle-math.pi ])
             if i == 1:
-                    angle = 2*math.pi * i / num_robots 
+                    angle = 2*math.pi * i / num_robots
                     position = [center[0] + radius * math.cos(angle),
                                 center[1] + radius * math.sin(angle),
                                 center[2]]
                     orientation = pybullet.getQuaternionFromEuler([0, 0, angle + math.pi])
             if i == 2:
-                angle = 2*math.pi * i / num_robots 
+                angle = 2*math.pi * i / num_robots
                 position = [center[0] + radius * math.cos(angle),
                             center[1] + radius * math.sin(angle),
                             center[2]]
                 orientation = pybullet.getQuaternionFromEuler([0, 0, angle])
             if i == 3:
-                    angle = 2*math.pi * i / num_robots 
+                    angle = 2*math.pi * i / num_robots
                     position = [center[0] + radius * math.cos(angle),
                                 center[1] + radius * math.sin(angle),
                                 center[2]]
                     orientation = pybullet.getQuaternionFromEuler([0, 0, angle+math.pi ])
 
-            
+
             robot= UR5Robot(position, orientation)
             robots.append(robot)
             for joint_index in robot.joint_indices:
@@ -158,7 +158,7 @@ class SimulationEnvironment:
 
         # Get current box pose
         current_box_pose = self.get_box_pose()
-        
+
         step_data = {
             'time': self.current_step * SimulationConfig.DT,
             'robot_states': robot_states,
@@ -183,4 +183,3 @@ class SimulationEnvironment:
         if object_id in self.constraints:
             pybullet.removeConstraint(self.constraints[object_id])
             del self.constraints[object_id]
-    
