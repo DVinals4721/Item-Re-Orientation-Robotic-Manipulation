@@ -78,7 +78,7 @@ This will execute the complete pipeline from path planning through simulation vi
 
 ## Research Paper & Video
 
-📄 **Paper**: [Orientation Control of Large Objects Using Multi-Arm Robotic Systems with Suction-Based End Effectors](link-to-paper.pdf)
+📄 **Paper**: [Orientation Control of Large Objects Using Multi-Arm Robotic Systems with Suction-Based End Effectors](https://github.com/DVinals4721/Item-Re-Orientation-Robotic-Manipulation/blob/main/research_paper.pdf)
 
 🎥 **Demo Video**: [Watch the multi-arm manipulation in action](https://www.youtube.com/watch?v=Nqc2ppG90kE)
 
